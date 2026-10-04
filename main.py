@@ -15,6 +15,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_BASE_URL = os.getenv("API_BASE_URL")
 API_KEY = os.getenv("API_KEY")
 PORT = int(os.getenv("PORT", "10000"))
+ADMIN_IDS = {int(x.strip()) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()}
 
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN is missing")
@@ -170,6 +171,22 @@ def extract_otp(data):
                 return str(value)
 
     return None
+
+
+async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("⛔ Admin access নেই।")
+        return
+
+    await update.message.reply_text(
+        "🛠️ <b>Admin Panel</b>\n\n"
+        "✅ Bot is online\n"
+        f"👤 Your Admin ID: <code>{update.effective_user.id}</code>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("📊 API Countries", callback_data="admin_countries")]
+        ]),
+    )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -558,6 +575,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
 
+    if data == "admin_countries":
+        if query.from_user.id not in ADMIN_IDS:
+            await query.answer("⛔ Admin access নেই.", show_alert=True)
+            return
+        try:
+            countries = await get_countries()
+            await query.answer(f"{len(countries)} countries")
+            await query.edit_message_text(
+                f"📊 <b>Admin Info</b>\n\n🌍 Countries available: <b>{len(countries)}</b>",
+                parse_mode="HTML",
+            )
+        except Exception:
+            await query.answer("API error", show_alert=True)
+        return
+
     if data == "countries":
         await show_countries(query)
         return
@@ -630,6 +662,7 @@ def main():
 
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("admin", admin))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_error_handler(error_handler)
 
